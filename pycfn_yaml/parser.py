@@ -42,7 +42,7 @@ def join_constructor(loader, node):
 
 def select_constructor(loader, node):
     fields = loader.construct_sequence(node)
-    return troposphere.Select(fields[0], fields[1])
+    return troposphere.Select(*fields)
 
 
 def condition_constructor(loader, node):
@@ -55,6 +55,16 @@ def base64_constructor(loader, node):
     return troposphere.Base64(fields)
 
 
+def findinmap_constructor(loader, node):
+    fields = loader.construct_sequence(node)
+    return troposphere.FindInMap(*fields)
+
+
+def getatt_constructor(loader, node):
+    fields = loader.construct_sequence(node)
+    return troposphere.GetAtt(*fields)
+
+
 yaml.add_constructor('!Ref', ref_constructor)
 yaml.add_constructor('!Join', join_constructor)
 yaml.add_constructor('!Select', select_constructor)
@@ -64,7 +74,9 @@ yaml.add_constructor('!If', if_constructor)
 yaml.add_constructor('!Not', not_constructor)
 yaml.add_constructor('!Or', or_constructor)
 yaml.add_constructor('!Condition', condition_constructor)
-yaml.add_constructor('!Base64', condition_constructor)
+yaml.add_constructor('!Base64', base64_constructor)
+yaml.add_constructor('!FindInMap', findinmap_constructor)
+yaml.add_constructor('!GetAtt', getatt_constructor)
 
 
 class YamlParser(object):
