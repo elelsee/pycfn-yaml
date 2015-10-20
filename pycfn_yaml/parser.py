@@ -1,5 +1,6 @@
 import yaml
 import troposphere
+from troposphere import ec2
 from troposphere import Join, Output, GetAtt, Tags
 from troposphere import Parameter, Ref, Template, Select
 
@@ -35,36 +36,36 @@ class YamlParser(object):
         self.outputs = self.template.get('Outputs')
         self.parsed = None
 
-    def get_resource(resource):
+    def get_resource(self, resource):
         r_name = resource.keys()[0]
         r_type = resource[r_name]['Type']
         kwargs = {}
-        if 'properties' in resource[r_name].keys():
+        if 'Properties' in resource[r_name].keys():
             kwargs = resource[r_name]['Properties']
         r_module, r_class = r_type.split('.')
         r = getattr(globals()[r_module], r_class)
         return r(r_name, **kwargs)
 
-    def get_output(output):
+    def get_output(self, output):
         name = output.keys()[0]
         value = output[name]['value']
         return Output(name, Value=value)
 
-    def get_parameter(parameter):
+    def get_parameter(self, parameter):
         name = parameter.keys()[0]
         kwargs = parameter[name]
         return Parameter(name, **kwargs)
 
     def build_template(self):
         self.parsed = Template()
-        with self.template.get('Resources') as resources:
-            for resource in resources:
-                self.parsed.add_resource(get_resource(resource))
+        resources = self.template.get('Resources')
+        for resource in resources:
+            self.parsed.add_resource(self.get_resource(resource))
 
-        with self.template.get('Outputs') as outputs:
-            for output in outputs:
-                self.parsed.add_output(get_output(output))
+        outputs = self.template.get('Outputs')
+        for output in outputs:
+            self.parsed.add_output(self.get_output(output))
 
-        with self.template.get('Parameters') as parameters:
-            for parameter in parameters:
-                self.parsed.add_parameter(get_parameter(parameter))
+        parameters = self.template.get('Parameters')
+        for parameter in parameters:
+            self.parsed.add_parameter(self.get_parameter(parameter))
