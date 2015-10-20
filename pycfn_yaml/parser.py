@@ -1,6 +1,6 @@
+import importlib
 import yaml
 import troposphere
-from troposphere import ec2
 from troposphere import Join, Output, GetAtt, Tags
 from troposphere import Parameter, Ref, Template, Select
 
@@ -37,14 +37,15 @@ class YamlParser(object):
         self.parsed = None
 
     def get_resource(self, resource):
-        r_name = resource.keys()[0]
-        r_type = resource[r_name]['Type']
+        name = resource.keys()[0]
+        resource_type = resource[name]['Type']
         kwargs = {}
-        if 'Properties' in resource[r_name].keys():
-            kwargs = resource[r_name]['Properties']
-        r_module, r_class = r_type.split('.')
-        r = getattr(globals()[r_module], r_class)
-        return r(r_name, **kwargs)
+        if 'Properties' in resource[name].keys():
+            kwargs = resource[name].get('Properties')
+        module, resource_class = resource_type.split('.')
+        troposphere_module = importlib.import_module('.{}'.format(module), package='troposphere')
+        r = getattr(troposphere_module, resource_class)
+        return r(name, **kwargs)
 
     def get_output(self, output):
         name = output.keys()[0]
