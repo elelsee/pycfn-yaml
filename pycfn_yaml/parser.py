@@ -50,6 +50,11 @@ def condition_constructor(loader, node):
     return troposphere.Condition(fields)
 
 
+def base64_constructor(loader, node):
+    fields = loader.construct_scalar(node)
+    return troposphere.Base64(fields)
+
+
 yaml.add_constructor('!Ref', ref_constructor)
 yaml.add_constructor('!Join', join_constructor)
 yaml.add_constructor('!Select', select_constructor)
@@ -59,6 +64,7 @@ yaml.add_constructor('!If', if_constructor)
 yaml.add_constructor('!Not', not_constructor)
 yaml.add_constructor('!Or', or_constructor)
 yaml.add_constructor('!Condition', condition_constructor)
+yaml.add_constructor('!Base64', condition_constructor)
 
 
 class YamlParser(object):
