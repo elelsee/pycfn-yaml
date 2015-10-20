@@ -72,10 +72,12 @@ class YamlParser(object):
 
     def get_resource(self, resource):
         name = resource.keys()[0]
-        resource_type = resource[name]['Type']
-        kwargs = {}
-        if 'Properties' in resource[name].keys():
-            kwargs = resource[name].get('Properties')
+        kwargs = resource[name]
+        resource_type = kwargs.pop('Type')
+        properties = None
+        if 'Properties' in kwargs:
+            properties = kwargs.pop('Properties')
+            kwargs.update(properties)
         module, resource_class = resource_type.split('.')
         troposphere_module = importlib.import_module('.{}'.format(module),
                                                      package='troposphere')
