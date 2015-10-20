@@ -1,4 +1,7 @@
 Parameters:
+- EnvType:
+    Type: 'String'
+    Default: 'dev'
 - CidrBlock:
     Type: 'String'
     Default: '172.31.0.0/16'
@@ -8,6 +11,9 @@ Parameters:
 - CidrBlockSubnetsInternal:
     Type: 'CommaDelimitedList'
     Default: '172.31.0.0/19, 172.31.32.0/19, 172.31.64.0/19'
+Conditions:
+- CreateProdResources : !Equals [ !Ref 'EnvType', 'prod' ]
+- CreateDevResources  : !Not [ !Condition 'CreateProdResources' ]
 Resources:
 - VPC: 
     Type: ec2.VPC
@@ -16,6 +22,7 @@ Resources:
         InstanceTenancy: 'default'
         EnableDnsSupport: True
         EnableDnsHostnames: True
+    Condition: "CreateDevResources"
 - InternetGateway:
     Type: ec2.InternetGateway
 - VPCGatewayAttachment:

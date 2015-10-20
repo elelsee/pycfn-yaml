@@ -1,30 +1,64 @@
 import importlib
 import yaml
 import troposphere
-from troposphere import Join, Output, GetAtt, Tags
-from troposphere import Parameter, Ref, Template, Select
 
 # Add constructors to handle cloudformation helpers in yaml
 
 
+def and_constructor(loader, node):
+    fields = loader.construct_sequence(node)
+    return troposphere.And(*fields)
+
+
+def equals_constructor(loader, node):
+    fields = loader.construct_sequence(node)
+    return troposphere.Equals(*fields)
+
+
+def if_constructor(loader, node):
+    fields = loader.construct_sequence(node)
+    return troposphere.If(*fields)
+
+
+def not_constructor(loader, node):
+    fields = loader.construct_sequence(node)
+    return troposphere.Not(*fields)
+
+
+def or_constructor(loader, node):
+    fields = loader.construct_sequence(node)
+    return troposphere.Or(*fields)
+
+
 def ref_constructor(loader, node):
     fields = loader.construct_scalar(node)
-    return Ref(fields)
+    return troposphere.Ref(fields)
 
 
 def join_constructor(loader, node):
     fields = loader.construct_sequence(node)
-    return Join(delimiter=fields[0], values=fields[1:])
+    return troposphere.Join(delimiter=fields[0], values=fields[1:])
 
 
 def select_constructor(loader, node):
     fields = loader.construct_sequence(node)
-    return Select(fields[0], fields[1])
+    return troposphere.Select(fields[0], fields[1])
+
+
+def condition_constructor(loader, node):
+    fields = loader.construct_scalar(node)
+    return troposphere.Condition(fields)
 
 
 yaml.add_constructor('!Ref', ref_constructor)
 yaml.add_constructor('!Join', join_constructor)
 yaml.add_constructor('!Select', select_constructor)
+yaml.add_constructor('!And', and_constructor)
+yaml.add_constructor('!Equals', equals_constructor)
+yaml.add_constructor('!If', if_constructor)
+yaml.add_constructor('!Not', not_constructor)
+yaml.add_constructor('!Or', or_constructor)
+yaml.add_constructor('!Condition', condition_constructor)
 
 
 class YamlParser(object):
@@ -43,30 +77,45 @@ class YamlParser(object):
         if 'Properties' in resource[name].keys():
             kwargs = resource[name].get('Properties')
         module, resource_class = resource_type.split('.')
-        troposphere_module = importlib.import_module('.{}'.format(module), package='troposphere')
+        troposphere_module = importlib.import_module('.{}'.format(module),
+                                                     package='troposphere')
         r = getattr(troposphere_module, resource_class)
         return r(name, **kwargs)
+
+    def get_condition(self, condition):
+        name = condition.keys()[0]
+        value = condition[name]
+        return name, value
 
     def get_output(self, output):
         name = output.keys()[0]
         value = output[name]['value']
-        return Output(name, Value=value)
+        return troposphere.Output(name, Value=value)
 
     def get_parameter(self, parameter):
         name = parameter.keys()[0]
         kwargs = parameter[name]
-        return Parameter(name, **kwargs)
+        return troposphere.Parameter(name, **kwargs)
 
     def build_template(self):
-        self.parsed = Template()
+        self.parsed = troposphere.Template()
+
         resources = self.template.get('Resources')
-        for resource in resources:
-            self.parsed.add_resource(self.get_resource(resource))
+        if resources:
+            for resource in resources:
+                self.parsed.add_resource(self.get_resource(resource))
 
         outputs = self.template.get('Outputs')
-        for output in outputs:
-            self.parsed.add_output(self.get_output(output))
+        if outputs:
+            for output in outputs:
+                self.parsed.add_output(self.get_output(output))
 
         parameters = self.template.get('Parameters')
-        for parameter in parameters:
-            self.parsed.add_parameter(self.get_parameter(parameter))
+        if parameters:
+            for parameter in parameters:
+                self.parsed.add_parameter(self.get_parameter(parameter))
+
+        conditions = self.template.get('Conditions')
+        if conditions:
+            for condition in conditions:
+                self.parsed.add_condition(*self.get_condition(condition))
