@@ -22,6 +22,8 @@ Resources:
         InstanceTenancy: 'default'
         EnableDnsSupport: True
         EnableDnsHostnames: True
+        Tags: !Tags
+            Environment: !Ref EnvType
     Condition: "CreateDevResources"
 - InternetGateway:
     Type: ec2.InternetGateway

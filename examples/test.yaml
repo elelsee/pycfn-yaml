@@ -1,0 +1,11 @@
+Resources:
+- VPC: 
+    Type: ec2.VPC
+    Properties:
+        CidrBlock: !Ref CidrBlock
+        InstanceTenancy: 'default'
+        EnableDnsSupport: True
+        EnableDnsHostnames: True
+        Tags: !Tags
+            GatewayId: !StackName
+    Condition: "CreateDevResources"

@@ -8,6 +8,6 @@ setup(name='pycfn-yaml',
       author_email='scott@elelsee.com',
       url='https://github.com/elelsee/pycfn-yaml',
       packages=find_packages(),
-      py_modules= ['pycfn_yaml.parser'],
+      py_modules= ['pycfn_yaml'],
       install_requires = ['PyYAML==3.11', 'troposphere==1.2.2']
      )
