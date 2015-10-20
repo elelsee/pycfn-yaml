@@ -1,0 +1,139 @@
+Parameters:
+- CidrBlock:
+    Type: 'String'
+    Default: '172.31.0.0/16'
+- CidrBlockSubnetsExternal:
+    Type: 'CommaDelimitedList'
+    Default: '172.31.96.0/19, 172.31.128.0/19, 172.31.160.0/19'
+- CidrBlockSubnetsInternal:
+    Type: 'CommaDelimitedList'
+    Default: '172.31.0.0/19, 172.31.32.0/19, 172.31.64.0/19'
+Resources:
+- VPC: 
+    Type: ec2.VPC
+    Properties:
+        CidrBlock: !Ref CidrBlock
+        InstanceTenancy: 'default'
+        EnableDnsSupport: True
+        EnableDnsHostnames: True
+- InternetGateway:
+    Type: ec2.InternetGateway
+- VPCGatewayAttachment:
+    Type: ec2.VPCGatewayAttachment
+    Properties:
+        InternetGatewayId: !Ref 'InternetGateway'
+        VpcId: !Ref 'VPC'
+- DHCPOptions:
+    Type: ec2.DHCPOptions
+    Properties:
+        DomainName: 'ec2.internal'
+        DomainNameServers: ['AmazonProvidedDNS']
+- NetworkAcl:
+    Type: ec2.NetworkAcl
+    Properties:
+        VpcId: !Ref 'VPC'
+- NetworkAclEntryIngress:
+    Type: ec2.NetworkAclEntry
+    Properties:
+        CidrBlock: '0.0.0.0/0'
+        Egress: False
+        NetworkAclId: !Ref 'NetworkAcl'
+        Protocol: -1
+        RuleAction: 'allow'
+        RuleNumber: 100
+- NetworkAclEntryEgress:
+    Type: ec2.NetworkAclEntry
+    Properties:
+        CidrBlock: '0.0.0.0/0'
+        Egress: True
+        NetworkAclId: !Ref 'NetworkAcl'
+        Protocol: -1
+        RuleAction: 'allow'
+        RuleNumber: 100
+- RouteTableExternal:
+    Type: ec2.RouteTable
+    Properties: 
+        VpcId: !Ref 'VPC'
+- RouteTableInternal:
+    Type: ec2.RouteTable
+    Properties:
+        VpcId: !Ref 'VPC'
+- RouteExternal:
+    Type: ec2.Route
+    Properties:
+        DestinationCidrBlock: '0.0.0.0/0'
+        GatewayId: !Ref 'InternetGateway'
+        RouteTableId: !Ref 'RouteTableExternal'
+- RouteInternal:
+    Type: ec2.Route
+    Properties: 
+        DestinationCidrBlock: '0.0.0.0/0'
+        GatewayId: !Ref 'InternetGateway'
+        RouteTableId: !Ref 'RouteTableInternal'
+- SubnetInternalA:
+    Type: ec2.Subnet
+    Properties: 
+        CidrBlock: !Select [ 0, !Ref CidrBlockSubnetsInternal ]
+        VpcId: !Ref 'VPC'
+- SubnetRouteTableAssociationInternalA:
+    Type: ec2.SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'RouteTableInternal'
+      SubnetId: !Ref 'SubnetInternalA'
+- SubnetInternalB:
+    Type: ec2.Subnet
+    Properties:
+        CidrBlock: !Select [ 1, !Ref CidrBlockSubnetsInternal ]
+        VpcId: !Ref 'VPC'
+- SubnetRouteTableAssociationInternalB:
+    Type: ec2.SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'RouteTableInternal'
+      SubnetId: !Ref 'SubnetInternalB'
+- SubnetInternalC:
+    Type: ec2.Subnet
+    Properties: 
+        CidrBlock: !Select [ 2, !Ref CidrBlockSubnetsInternal ]
+        VpcId: !Ref 'VPC'
+- SubnetRouteTableAssociationInternalC:
+    Type: ec2.SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'RouteTableInternal'
+      SubnetId: !Ref 'SubnetInternalC'
+- SubnetExternalA:
+    Type: ec2.Subnet
+    Properties: 
+        CidrBlock: !Select [ 0, !Ref CidrBlockSubnetsExternal ]
+        VpcId: !Ref 'VPC'
+- SubnetRouteTableAssociationExternalA:
+    Type: ec2.SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'RouteTableExternal'
+      SubnetId: !Ref 'SubnetExternalA'
+- SubnetExternalB:
+    Type: ec2.Subnet
+    Properties: 
+        CidrBlock: !Select [ 1, !Ref CidrBlockSubnetsExternal ]
+        VpcId: !Ref 'VPC'
+- SubnetRouteTableAssociationExternalB:
+    Type: ec2.SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'RouteTableExternal'
+      SubnetId: !Ref 'SubnetExternalB'
+- SubnetExternalC:
+    Type: ec2.Subnet
+    Properties: 
+        CidrBlock: !Select [ 2, !Ref CidrBlockSubnetsExternal ]
+        VpcId: !Ref 'VPC'
+- SubnetRouteTableAssociationExternalC:
+    Type: ec2.SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'RouteTableExternal'
+      SubnetId: !Ref 'SubnetExternalC'
+Outputs:
+- VpcId: 
+    value: !Ref 'VPC'
+- SubnetsExternal:
+    value: !Join [ ",", !Ref 'SubnetExternalA', !Ref 'SubnetExternalB', !Ref 'SubnetExternalC' ]
+- SubnetsInternal:
+    value: !Join [ ",", !Ref 'SubnetInternalA', !Ref 'SubnetInternalB', !Ref 'SubnetInternalC' ]
