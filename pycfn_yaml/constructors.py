@@ -138,3 +138,8 @@ def stackname_constructor(loader, node):
 
 yaml.add_constructor('!StackName', stackname_constructor)
 
+
+def include_constructor(loader, node):
+    return
+
+yaml.add_constructor('!Include', include_constructor)
