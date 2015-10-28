@@ -7,6 +7,7 @@ class YamlParser(object):
     def __init__(self, template):
         super(YamlParser, self).__init__()
         self.template = constructors.yaml.load(template)
+        self.description = self.template.get('Description')
         self.parameters = self.template.get('Parameters')
         self.resources = self.template.get('Resources')
         self.outputs = self.template.get('Outputs')
@@ -44,6 +45,11 @@ class YamlParser(object):
 
     def build_template(self):
         self.parsed = troposphere.Template()
+        self.parsed.add_version()
+
+        description = self.description
+        self.parsed.add_description(description)
+
         resources = self.resources
         if resources:
             for resource in resources:
