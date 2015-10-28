@@ -50,6 +50,16 @@ class YamlParser(object):
         description = self.description
         self.parsed.add_description(description)
 
+        parameters = self.parameters
+        if parameters:
+            for parameter in parameters:
+                self.parsed.add_parameter(self.get_parameter(parameter))
+
+        conditions = self.conditions
+        if conditions:
+            for condition in conditions:
+                self.parsed.add_condition(*self.get_condition(condition))
+
         resources = self.resources
         if resources:
             for resource in resources:
@@ -60,12 +70,3 @@ class YamlParser(object):
             for output in outputs:
                 self.parsed.add_output(self.get_output(output))
 
-        parameters = self.parameters
-        if parameters:
-            for parameter in parameters:
-                self.parsed.add_parameter(self.get_parameter(parameter))
-
-        conditions = self.conditions
-        if conditions:
-            for condition in conditions:
-                self.parsed.add_condition(*self.get_condition(condition))
