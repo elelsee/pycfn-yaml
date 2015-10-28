@@ -1,16 +1,29 @@
 Description: 'A sample VPC implementation'
+Metadata:
+    Version: 0.1
+Mappings:
+- RegionMap:
+    us-east-1:
+        32: ami-6411e20d
+        64: ami-7a11e213
+    us-west-1:
+        32: ami-c9c7978c
+        64: ami-cfc7978a
+    eu-west-1:
+        32: ami-37c2f643
+        64: ami-31c2f645
 Parameters:
 - EnvType:
-    Type: 'String'
-    Default: 'dev'
+    Type: String
+    Default: dev
 - CidrBlock:
-    Type: 'String'
-    Default: '172.31.0.0/16'
+    Type: String
+    Default: 172.31.0.0/16
 - CidrBlockSubnetsExternal:
-    Type: 'CommaDelimitedList'
+    Type: CommaDelimitedList
     Default: '172.31.96.0/19, 172.31.128.0/19, 172.31.160.0/19'
 - CidrBlockSubnetsInternal:
-    Type: 'CommaDelimitedList'
+    Type: CommaDelimitedList
     Default: '172.31.0.0/19, 172.31.32.0/19, 172.31.64.0/19'
 Conditions:
 - CreateProdResources : !Equals [ !Ref 'EnvType', 'prod' ]
@@ -20,12 +33,12 @@ Resources:
     Type: ec2.VPC
     Properties:
         CidrBlock: !Ref CidrBlock
-        InstanceTenancy: 'default'
+        InstanceTenancy: default
         EnableDnsSupport: True
         EnableDnsHostnames: True
         Tags: !Tags
             Environment: !Ref EnvType
-    Condition: "CreateDevResources"
+    Condition: CreateDevResources
 - InternetGateway:
     Type: ec2.InternetGateway
 - VPCGatewayAttachment:

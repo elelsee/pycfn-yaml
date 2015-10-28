@@ -8,11 +8,19 @@ class YamlParser(object):
         super(YamlParser, self).__init__()
         self.template = constructors.yaml.load(template)
         self.description = self.template.get('Description')
+        self.metadata = self.template.get('Metadata')
+        self.mappings = self.template.get('Mappings')
         self.parameters = self.template.get('Parameters')
         self.resources = self.template.get('Resources')
         self.outputs = self.template.get('Outputs')
         self.conditions = self.template.get('Conditions')
         self.parsed = None
+
+
+    def get_mapping(self, mapping):
+        name = mapping.keys()[0]
+        value = mapping[name]
+        return name, value
 
     def get_resource(self, resource):
         name = resource.keys()[0]
@@ -49,6 +57,14 @@ class YamlParser(object):
 
         description = self.description
         self.parsed.add_description(description)
+
+        metadata = self.metadata
+        self.parsed.add_metadata(metadata)
+
+        mappings = self.mappings
+        if mappings:
+            for mapping in mappings:
+                self.parsed.add_mapping(*self.get_mapping(mapping))
 
         parameters = self.parameters
         if parameters:
