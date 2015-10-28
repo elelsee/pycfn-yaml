@@ -1,6 +1,9 @@
 Description: 'A sample VPC implementation'
 Metadata:
     Version: 0.1
+    GlobalTags: !Tags
+        MetadataTag: !Ref EnvType
+        MetadataTag2: test tag
 Mappings:
 - RegionMap:
     us-east-1:
