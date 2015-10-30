@@ -33,6 +33,9 @@ class YamlParser(object):
         value = condition[name]
         return name, value
 
+    def custom_resource(self, custom_resource):
+        return None
+
     def get_resource(self, resource):
         name = resource.keys()[0]
         kwargs = resource[name]
@@ -42,9 +45,13 @@ class YamlParser(object):
             properties = kwargs.pop('Properties')
             kwargs.update(properties)
         module, resource_class = resource_type.split('.')
-        troposphere_module = importlib.import_module('.{}'.format(module),
-                                                     package='troposphere')
-        r = getattr(troposphere_module, resource_class)
+        if module == 'custom':
+            r = custom_resource(resource_class)
+
+        else:
+            resource_module = importlib.import_module('.{}'.format(module),
+                                                      package='troposphere')
+            r = getattr(resource_module, resource_class)
         return r(name, **kwargs)
 
     def get_output(self, output):
