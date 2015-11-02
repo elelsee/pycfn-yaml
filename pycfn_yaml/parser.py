@@ -38,9 +38,7 @@ class YamlParser(object):
         return None
 
     def get_resource_property_types(self, resource, properties):
-        print resource
         for prop in properties:
-            print('Prop {}'.format(prop))
             expected_type = resource.props[prop][0]
             if not isinstance(expected_type, (types.TupleType, 
                                               types.ListType,
@@ -50,7 +48,6 @@ class YamlParser(object):
                     name = expected_type.__name__
                     property_type = getattr(module, name)
                     values = properties[prop]
-                    print values
                     properties[prop] = property_type(**values)
         return properties
 
@@ -85,16 +82,17 @@ class YamlParser(object):
         return tags
 
     def add_global_tags(self):
-        global_tags = self.metadata.get('GlobalTags')
-        resources = self.parsed.resources
-        if global_tags:
-            for i in resources:
-                if 'Tags' in resources[i].props:
-                    if 'Tags' in resources[i].properties:
-                        current_tags = resources[i].properties['Tags']
-                        resources[i].properties['Tags'] = self.append_tags(current_tags, global_tags)
-                    else:
-                        resources[i].properties['Tags'] = global_tags
+        if self.metadata:
+            global_tags = self.metadata.get('GlobalTags')
+            resources = self.parsed.resources
+            if global_tags:
+                for i in resources:
+                    if 'Tags' in resources[i].props:
+                        if 'Tags' in resources[i].properties:
+                            current_tags = resources[i].properties['Tags']
+                            resources[i].properties['Tags'] = self.append_tags(current_tags, global_tags)
+                        else:
+                            resources[i].properties['Tags'] = global_tags
         return 
 
     def build_template(self):

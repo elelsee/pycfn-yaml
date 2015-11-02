@@ -23,6 +23,7 @@ class CustomParser(YamlParser):
     def custom_resource(self, custom_resource):
         return ElasticsearchDomain
 
+
 if __name__ == '__main__':
     f = open('examples/iam.yaml')
     p = CustomParser(f)
