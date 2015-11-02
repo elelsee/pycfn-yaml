@@ -1,6 +1,7 @@
 import importlib
 import troposphere
 import constructors
+import types
 
 
 class YamlParser(object):
@@ -33,18 +34,41 @@ class YamlParser(object):
         value = condition[name]
         return name, value
 
+    def custom_resource(self, custom_resource):
+        return None
+
+    def get_resource_property_types(self, resource, properties):
+        for prop in properties:
+            expected_type = resource.props[prop][0]
+            if not isinstance(expected_type, (types.TupleType, 
+                                              types.ListType,
+                                              types.FunctionType)):
+                if expected_type.__module__.startswith('troposphere'):
+                    module = importlib.import_module(expected_type.__module__)
+                    name = expected_type.__name__
+                    property_type = getattr(module, name)
+                    values = properties[prop]
+                    properties[prop] = property_type(**values)
+        return properties
+
     def get_resource(self, resource):
         name = resource.keys()[0]
         kwargs = resource[name]
         resource_type = kwargs.pop('Type')
+        module, resource_class = resource_type.split('.')
+        if module == 'custom':
+            r = self.custom_resource(resource_class)
+        else:
+            resource_module = importlib.import_module('.{}'.format(module),
+                                                      package='troposphere')
+            r = getattr(resource_module, resource_class)
+
         properties = None
         if 'Properties' in kwargs:
             properties = kwargs.pop('Properties')
+            properties = self.get_resource_property_types(r, properties)
             kwargs.update(properties)
-        module, resource_class = resource_type.split('.')
-        troposphere_module = importlib.import_module('.{}'.format(module),
-                                                     package='troposphere')
-        r = getattr(troposphere_module, resource_class)
+
         return r(name, **kwargs)
 
     def get_output(self, output):
@@ -58,16 +82,17 @@ class YamlParser(object):
         return tags
 
     def add_global_tags(self):
-        global_tags = self.metadata.get('GlobalTags')
-        resources = self.parsed.resources
-        if global_tags:
-            for i in resources:
-                if 'Tags' in resources[i].props:
-                    if 'Tags' in resources[i].properties:
-                        current_tags = resources[i].properties['Tags']
-                        resources[i].properties['Tags'] = self.append_tags(current_tags, global_tags)
-                    else:
-                        resources[i].properties['Tags'] = global_tags
+        if self.metadata:
+            global_tags = self.metadata.get('GlobalTags')
+            resources = self.parsed.resources
+            if global_tags:
+                for i in resources:
+                    if 'Tags' in resources[i].props:
+                        if 'Tags' in resources[i].properties:
+                            current_tags = resources[i].properties['Tags']
+                            resources[i].properties['Tags'] = self.append_tags(current_tags, global_tags)
+                        else:
+                            resources[i].properties['Tags'] = global_tags
         return 
 
     def build_template(self):

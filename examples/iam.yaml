@@ -1,0 +1,80 @@
+Description: 'A elasticsearch service implementation'
+
+Metadata:
+    Version: 0.1
+
+Resources:
+- LogsPolicy:
+    Type: iam.Policy
+    Properties:
+        PolicyName: LogsPolicy
+        PolicyDocument:
+            Statement:
+                - Effect: Allow
+                  Action:
+                    - 'logs:CreateLogGroup'
+                    - 'logs:CreateLogStream'
+                    - 'logs:PutLogEvents'
+                  Resource: 'arn:aws:logs:*:*:*'
+
+- ElasticsearchPolicy:
+    Type: iam.Policy
+    Properties:
+        PolicyName: root
+        PolicyDocument:
+            Statement:
+                - Effect: Allow
+                  Action:
+                    - 'es:*'
+                  Resource: 'arn:aws:es:*:*:*'
+
+- LambdaExecutionRole:
+    Type: iam.Role
+    Properties:
+        AssumeRolePolicyDocument:
+            Statement:
+                - Effect: Allow
+                  Principal:
+                    Service:
+                        - lambda.amazonaws.com
+                  Action:
+                      - 'sts:AssumeRole'
+        Path: '/'
+        Policies:
+            - !Ref LogsPolicy
+            - !Ref ElasticsearchPolicy
+
+- LambdaCustomResourceElasticsearch:
+    Type: awslambda.Function
+    Properties:
+        Handler: 'es.lambda_handler'
+        Role: !GetAtt [ LambdaExecutionRole, Arn ]
+        Code:
+            S3Bucket: elelsee-lambda
+            S3Key: 'customresource-aws-es/es.zip'
+        Runtime: python2.7
+        Timeout: 60
+
+- ElasticsearchDomain:
+      Type: custom.ElasticsearchDomain
+      Properties:
+        ServiceToken: !GetAtt [ LambdaCustomResourceElasticsearch, Arn ]
+        DomainName: testdomain5
+        ElasticsearchClusterConfig:
+            InstanceType: t2.micro.elasticsearch
+            InstanceCount: 1
+            DedicatedMasterEnabled: False
+            ZoneAwarenessEnabled: False
+        EBSOptions:
+            EBSEnabled: True
+            VolumeType: standard
+            VolumeSize: 20
+        AccessPolicies:
+            Version: '2012-10-17'
+            Statement:
+                - Action: 'es:*'
+                  Principal: '*'
+                  Effect: Allow
+                  Condition:
+                    IpAddress:
+                        'aws:SourceIp': '66.192.34.156/32'

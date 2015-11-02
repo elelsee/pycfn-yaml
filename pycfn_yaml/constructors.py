@@ -137,4 +137,3 @@ def stackname_constructor(loader, node):
     return troposphere.Ref(troposphere.AWS_STACK_NAME)
 
 yaml.add_constructor('!StackName', stackname_constructor)
-
