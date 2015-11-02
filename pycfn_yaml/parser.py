@@ -1,6 +1,7 @@
 import importlib
 import troposphere
 import constructors
+import types
 
 
 class YamlParser(object):
@@ -36,22 +37,41 @@ class YamlParser(object):
     def custom_resource(self, custom_resource):
         return None
 
+    def get_resource_property_types(self, resource, properties):
+        print resource
+        for prop in properties:
+            print('Prop {}'.format(prop))
+            expected_type = resource.props[prop][0]
+            if not isinstance(expected_type, (types.TupleType, 
+                                              types.ListType,
+                                              types.FunctionType)):
+                if expected_type.__module__.startswith('troposphere'):
+                    module = importlib.import_module(expected_type.__module__)
+                    name = expected_type.__name__
+                    property_type = getattr(module, name)
+                    values = properties[prop]
+                    print values
+                    properties[prop] = property_type(**values)
+        return properties
+
     def get_resource(self, resource):
         name = resource.keys()[0]
         kwargs = resource[name]
         resource_type = kwargs.pop('Type')
-        properties = None
-        if 'Properties' in kwargs:
-            properties = kwargs.pop('Properties')
-            kwargs.update(properties)
         module, resource_class = resource_type.split('.')
         if module == 'custom':
-            r = custom_resource(resource_class)
-
+            r = self.custom_resource(resource_class)
         else:
             resource_module = importlib.import_module('.{}'.format(module),
                                                       package='troposphere')
             r = getattr(resource_module, resource_class)
+
+        properties = None
+        if 'Properties' in kwargs:
+            properties = kwargs.pop('Properties')
+            properties = self.get_resource_property_types(r, properties)
+            kwargs.update(properties)
+
         return r(name, **kwargs)
 
     def get_output(self, output):

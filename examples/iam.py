@@ -24,6 +24,6 @@ class CustomParser(YamlParser):
         return ElasticsearchDomain
 
 if __name__ == '__main__':
-    f = open('iam.yaml')
+    f = open('examples/iam.yaml')
     p = CustomParser(f)
     print p.parsed.to_json()
