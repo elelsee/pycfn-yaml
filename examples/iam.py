@@ -10,7 +10,7 @@ class ElasticsearchDomain(AWSCustomObject):
 
     props = {
         'ServiceToken': (basestring, True),
-        'DomainName': (basestring, True),
+        'DomainName': (basestring, False),
         'ElasticsearchClusterConfig': (dict, False),
         'EBSOptions': (dict, False),
         'AccessPolicies': (policytypes, False),

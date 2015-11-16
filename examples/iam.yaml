@@ -1,7 +1,104 @@
-Description: 'A elasticsearch service implementation'
+Description: 'An AWS elasticsearch service custom resource implementation'
 
 Metadata:
     Version: 0.1
+
+Parameters:
+- DomainName:
+    Type: String
+- InstanceType:
+    Type: String
+    Default: t2.micro.elasticsearch
+    AllowedValues:
+        - t2.micro.elasticsearch
+        - t2.small.elasticsearch
+        - t2.medium.elasticsearch
+        - m3.medium.elasticsearch
+        - m3.large.elasticsearch
+        - m3.xlarge.elasticsearch
+        - m3.2xlarge.elasticsearch
+        - r3.large.elasticsearch
+        - r3.xlarge.elasticsearch
+        - r3.2xlarge.elasticsearch
+        - r3.4xlarge.elasticsearch
+        - r3.8xlarge.elasticsearch
+        - i2.xlarge.elasticsearch
+        - i2.2xlarge.elasticsearch
+- InstanceCount:
+    Type: Number
+    Default: '1'
+- DedicatedMasterEnabled:
+    Type: String
+    Default: 'False'
+    AllowedValues:
+        - 'True'
+        - 'False'
+- DedicatedMasterCount:
+    Type: Number
+    Default: '1'
+- DedicatedMasterType:
+    Type: String
+    Default: t2.micro.elasticsearch
+    AllowedValues:
+        - t2.micro.elasticsearch
+        - t2.small.elasticsearch
+        - t2.medium.elasticsearch
+        - m3.medium.elasticsearch
+        - m3.large.elasticsearch
+        - m3.xlarge.elasticsearch
+        - m3.2xlarge.elasticsearch
+        - r3.large.elasticsearch
+        - r3.xlarge.elasticsearch
+        - r3.2xlarge.elasticsearch
+        - r3.4xlarge.elasticsearch
+        - r3.8xlarge.elasticsearch
+        - i2.xlarge.elasticsearch
+        - i2.2xlarge.elasticsearch
+- ZoneAwarenessEnabled:
+    Type: String
+    Default: 'False'
+    AllowedValues:
+        - 'True'
+        - 'False'
+- EBSEnabled:
+    Type: String
+    Default: 'False'
+    AllowedValues:
+        - 'True'
+        - 'False'
+- VolumeType:
+    Type: String
+    Default: standard
+    AllowedValues: 
+        - standard
+        - gp2
+        - io1
+- VolumeSize:
+    Type: String
+    Default: '0'
+- Iops:
+    Type: Number
+    Default: '0'
+- AccessPolicies:
+    Type: String
+    Default: 'False'
+- AutomatedSnapshotStartHour:
+    Type: Number
+    Default: '0'
+- RestActionMultiAllowExplicitIndex:
+    Type: String
+    Default: 'True'
+- IndicesFielddataCacheSize:
+    Type: Number
+    Default: '-1'
+
+
+Conditions:
+- ConditionDedicatedMasterEnabled: !Equals [ !Ref DedicatedMasterEnabled, True ]
+- ConditionEbsEnabled: !Equals [ !Ref EBSEnabled, True ]
+- ConditionVolumeTypeIo1: !Equals [ !Ref VolumeType, io1 ]
+- ConditionAccessPolicies: !Not [ !Equals [ !Ref AccessPolicies, False ] ]
+- ConditionIndicesFielddataCacheSize: !Not [ !Equals [ !Ref IndicesFielddataCacheSize, '-1' ] ]
 
 Resources:
 - LogsPolicy:
@@ -53,28 +150,29 @@ Resources:
             S3Bucket: elelsee-lambda
             S3Key: 'customresource-aws-es/es.zip'
         Runtime: python2.7
-        Timeout: 60
+        Timeout: 300
 
 - ElasticsearchDomain:
       Type: custom.ElasticsearchDomain
       Properties:
         ServiceToken: !GetAtt [ LambdaCustomResourceElasticsearch, Arn ]
-        DomainName: testdomain5
+        DomainName: !Ref DomainName
         ElasticsearchClusterConfig:
-            InstanceType: t2.micro.elasticsearch
-            InstanceCount: 1
-            DedicatedMasterEnabled: False
-            ZoneAwarenessEnabled: False
+            InstanceType: !Ref InstanceType
+            InstanceCount: !Ref InstanceCount
+            DedicatedMasterEnabled: !Ref DedicatedMasterEnabled
+            DedicatedMasterType: !If [ ConditionDedicatedMasterEnabled, !Ref DedicatedMasterType, !NoValue ]
+            DedicatedMasterCount: !If [ ConditionDedicatedMasterEnabled, !Ref DedicatedMasterCount, !NoValue ]
+            ZoneAwarenessEnabled: !Ref ZoneAwarenessEnabled
         EBSOptions:
-            EBSEnabled: True
-            VolumeType: standard
-            VolumeSize: 20
-        AccessPolicies:
-            Version: '2012-10-17'
-            Statement:
-                - Action: 'es:*'
-                  Principal: '*'
-                  Effect: Allow
-                  Condition:
-                    IpAddress:
-                        'aws:SourceIp': '66.192.34.156/32'
+            EBSEnabled: !Ref EBSEnabled
+            VolumeType: !If [ ConditionEbsEnabled, !Ref VolumeType, !NoValue ]
+            VolumeSize: !If [ ConditionEbsEnabled, !Ref VolumeSize, !NoValue ]
+            Iops: !If [ ConditionVolumeTypeIo1, !Ref Iops, !NoValue ]
+        AccessPolicies: !If [ ConditionAccessPolicies, !Ref AccessPolicies, !NoValue ]
+        SnapshotOptions:
+            AutomatedSnapshotStartHour: !Ref AutomatedSnapshotStartHour
+        AdvancedOptions: 
+            rest.action.multi.allow_explicit: !Ref RestActionMultiAllowExplicitIndex
+            indices.fielddata.cache.size: !If [ ConditionIndicesFielddataCacheSize, !Ref IndicesFielddataCacheSize, !NoValue ]
+
