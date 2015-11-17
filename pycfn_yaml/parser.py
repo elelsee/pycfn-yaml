@@ -63,6 +63,8 @@ class YamlParser(object):
                                                       package='troposphere')
             r = getattr(resource_module, resource_class)
 
+        if module == 'lambda': module = 'awslambda'
+
         properties = None
         if 'Properties' in kwargs:
             properties = kwargs.pop('Properties')
@@ -93,7 +95,7 @@ class YamlParser(object):
                             resources[i].properties['Tags'] = self.append_tags(current_tags, global_tags)
                         else:
                             resources[i].properties['Tags'] = global_tags
-        return 
+        return
 
     def build_template(self):
         self.parsed = troposphere.Template()
