@@ -1,4 +1,4 @@
-Description: 'An AWS elasticsearch service custom resource implementation'
+Description: 'An AWS Elasticsearch Service custom resource implementation'
 
 Metadata:
     Version: 0.1
@@ -53,7 +53,7 @@ Parameters:
         - r3.4xlarge.elasticsearch
         - r3.8xlarge.elasticsearch
         - i2.xlarge.elasticsearch
-        - i2.2xlarge.elasticsearch
+        - i2.2xlarge.elasticwsearch
 - ZoneAwarenessEnabled:
     Type: String
     Default: 'False'
@@ -94,17 +94,19 @@ Parameters:
 
 
 Conditions:
-- ConditionDedicatedMasterEnabled: !Equals [ !Ref DedicatedMasterEnabled, True ]
-- ConditionEbsEnabled: !Equals [ !Ref EBSEnabled, True ]
-- ConditionVolumeTypeIo1: !Equals [ !Ref VolumeType, io1 ]
-- ConditionAccessPolicies: !Not [ !Equals [ !Ref AccessPolicies, False ] ]
-- ConditionIndicesFielddataCacheSize: !Not [ !Equals [ !Ref IndicesFielddataCacheSize, '-1' ] ]
+- DedicatedMasterIsEnabled: !Equals [ !Ref DedicatedMasterEnabled, True ]
+- EbsIsEnabled: !Equals [ !Ref EBSEnabled, True ]
+- VolumeTypeIsIo1: !Equals [ !Ref VolumeType, io1 ]
+- AccessPoliciesExists: !Not [ !Equals [ !Ref AccessPolicies, False ] ]
+- IndicesFielddataCacheSizeExists: !Not [ !Equals [ !Ref IndicesFielddataCacheSize, '-1' ] ]
 
 Resources:
+
+# Lambda Function provides Elasticsearch Service Custom Resource
 - LogsPolicy:
     Type: iam.Policy
     Properties:
-        PolicyName: LogsPolicy
+        PolicyName: logs
         PolicyDocument:
             Statement:
                 - Effect: Allow
@@ -117,13 +119,22 @@ Resources:
 - ElasticsearchPolicy:
     Type: iam.Policy
     Properties:
-        PolicyName: root
+        PolicyName: es
         PolicyDocument:
             Statement:
                 - Effect: Allow
-                  Action:
-                    - 'es:*'
+                  Action: 'es:*'
                   Resource: 'arn:aws:es:*:*:*'
+
+- LambdaPolicy:
+    Type: iam.Policy
+    Properties:
+        PolicyName: lambda
+        PolicyDocument:
+            Statement:
+                - Effect: Allow
+                  Action: 'lambda:*'
+                  Resource: 'arn:aws:lambda:*:*:*'
 
 - LambdaExecutionRole:
     Type: iam.Role
@@ -132,47 +143,364 @@ Resources:
             Statement:
                 - Effect: Allow
                   Principal:
-                    Service:
-                        - lambda.amazonaws.com
-                  Action:
-                      - 'sts:AssumeRole'
+                    Service: lambda.amazonaws.com
+                  Action: 'sts:AssumeRole'
         Path: '/'
         Policies:
             - !Ref LogsPolicy
             - !Ref ElasticsearchPolicy
+            - !Ref LambdaPolicy
 
-- LambdaCustomResourceElasticsearch:
+- LambdaCustomResource:
     Type: awslambda.Function
     Properties:
         Handler: 'es.lambda_handler'
         Role: !GetAtt [ LambdaExecutionRole, Arn ]
         Code:
             S3Bucket: elelsee-lambda
-            S3Key: 'customresource-aws-es/es.zip'
+            S3Key: 'customresource-aws-es/handler.zip'
         Runtime: python2.7
         Timeout: 300
 
+# Elasticsearch Service Domain Definition
 - ElasticsearchDomain:
       Type: custom.ElasticsearchDomain
       Properties:
-        ServiceToken: !GetAtt [ LambdaCustomResourceElasticsearch, Arn ]
+        ServiceToken: !GetAtt [ LambdaCustomResource, Arn ]
         DomainName: !Ref DomainName
         ElasticsearchClusterConfig:
             InstanceType: !Ref InstanceType
             InstanceCount: !Ref InstanceCount
             DedicatedMasterEnabled: !Ref DedicatedMasterEnabled
-            DedicatedMasterType: !If [ ConditionDedicatedMasterEnabled, !Ref DedicatedMasterType, !NoValue ]
-            DedicatedMasterCount: !If [ ConditionDedicatedMasterEnabled, !Ref DedicatedMasterCount, !NoValue ]
+            DedicatedMasterType: !If [ DedicatedMasterIsEnabled, !Ref DedicatedMasterType, !NoValue ]
+            DedicatedMasterCount: !If [ DedicatedMasterIsEnabled, !Ref DedicatedMasterCount, !NoValue ]
             ZoneAwarenessEnabled: !Ref ZoneAwarenessEnabled
         EBSOptions:
             EBSEnabled: !Ref EBSEnabled
-            VolumeType: !If [ ConditionEbsEnabled, !Ref VolumeType, !NoValue ]
-            VolumeSize: !If [ ConditionEbsEnabled, !Ref VolumeSize, !NoValue ]
-            Iops: !If [ ConditionVolumeTypeIo1, !Ref Iops, !NoValue ]
-        AccessPolicies: !If [ ConditionAccessPolicies, !Ref AccessPolicies, !NoValue ]
+            VolumeType: !If [ EbsIsEnabled, !Ref VolumeType, !NoValue ]
+            VolumeSize: !If [ EbsIsEnabled, !Ref VolumeSize, !NoValue ]
+            Iops: !If [ VolumeTypeIsIo1, !Ref Iops, !NoValue ]
+        AccessPolicies: !If [ AccessPoliciesExists, !Ref AccessPolicies, !NoValue ]
         SnapshotOptions:
             AutomatedSnapshotStartHour: !Ref AutomatedSnapshotStartHour
         AdvancedOptions: 
             rest.action.multi.allow_explicit: !Ref RestActionMultiAllowExplicitIndex
-            indices.fielddata.cache.size: !If [ ConditionIndicesFielddataCacheSize, !Ref IndicesFielddataCacheSize, !NoValue ]
+            indices.fielddata.cache.size: !If [ IndicesFielddataCacheSizeExists, !Ref IndicesFielddataCacheSize, !NoValue ]
 
+#
+# Cloudwatch Alarms
+#
+- ClusterStatusGreenAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: LessThanThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: ClusterStatus.green
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: AWS/ES
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Minimum
+        Threshold: 1
+
+- ClusterStatusYellowAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: ClusterStatus.yellow
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Maximum
+        Threshold: 1
+
+- ClusterStatusRedAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: ClusterStatus.red
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Maximum
+        Threshold: 1
+
+- NodesAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: Nodes
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Average
+        Threshold: !Ref InstanceCount
+
+- CPUUtilizationAverageAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: CPUUtilization
+        Dimensions: 
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Average
+        Threshold: 66
+
+- CPUUtilizationMinimumAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: CPUUtilization
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Minimum
+        Threshold: 80
+
+- CPUUtilizationMaximumAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: CPUUtilization
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Maximum
+        Threshold: 90
+
+- FreeStorageSpaceAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: LessThanThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: FreeStorageSpace
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Average
+        Threshold: 1000
+
+- JVMMemoryPressureAverageAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: JVMMemoryPressure
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Average
+        Threshold: 85
+
+- JVMMemoryPressureMinimumAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: JVMMemoryPressure
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Minimum
+        Threshold: 85
+
+- JVMMemoryPressureMaximumAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: JVMMemoryPressure
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Maximum
+        Threshold: 85
+
+- AutomatedSnapshotFailureAlarm:
+    Type: cloudwatch.Alarm
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 1
+        InsufficientDataActions: !NotificationArns
+        MetricName: AutomatedSnapshotFailure
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 600
+        Statistic: Maximum
+        Threshold: 1
+
+
+# Conditional Dedicated Master Alarms
+- MasterCPUUtilizationAlarm:
+    Type: cloudwatch.Alarm
+    Condition: DedicatedMasterIsEnabled
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: MasterCPUUtilization
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Average
+        Threshold: 60
+
+- MasterJVMMemoryPressureAlarm:
+    Type: cloudwatch.Alarm
+    Condition: DedicatedMasterIsEnabled
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: MasterJVMMemoryPressure
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Average
+        Threshold: 85
+
+
+# Conditional EBS Alarms
+- ReadLatencyAlarm:
+    Type: cloudwatch.Alarm
+    Condition: EbsIsEnabled
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: ReadLatency
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Average
+        Threshold: 0.250
+
+- WriteLatencyAlarm:
+    Type: cloudwatch.Alarm
+    Condition: EbsIsEnabled
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: WriteLatency
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Average
+        Threshold: 0.250
+
+- DiskQueueLengthAlarm:
+    Type: cloudwatch.Alarm
+    Condition: EbsIsEnabled
+    Properties:
+        ActionsEnabled: True
+        AlarmActions: !NotificationArns
+        ComparisonOperator: GreaterThanThreshold
+        EvaluationPeriods: 5
+        InsufficientDataActions: !NotificationArns
+        MetricName: DiskQueueDepth
+        Dimensions:
+            - Name: DomainName
+              Value: !GetAtt [ ElasticsearchDomain, DomainName ]
+        Namespace: 'AWS/ES'
+        OKActions: !NotificationArns
+        Period: 60
+        Statistic: Average
+        Threshold: 0
